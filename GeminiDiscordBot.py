@@ -37,6 +37,18 @@ image_generation_config = {
     "top_k": 32,
     "max_output_tokens": 512,
 }
+video_generation_config = {
+    "temperature": 0.4,
+    "top_p": 1,
+    "top_k": 32,
+    "max_output_tokens": 512,
+}
+audio_generation_config = {
+    "temperature": 0.4,
+    "top_p": 1,
+    "top_k": 32,
+    "max_output_tokens": 512,
+}
 safety_settings = [
     {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
     {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
@@ -45,6 +57,8 @@ safety_settings = [
 ]
 text_model = genai.GenerativeModel(model_name="gemini-1.5-flash", generation_config=text_generation_config, safety_settings=safety_settings,system_instruction=system_prompt)
 image_model = genai.GenerativeModel(model_name="gemini-1.5-flash", generation_config=image_generation_config, safety_settings=safety_settings,system_instruction=image_prompt)
+video_model = genai.GenerativeModel(model_name="gemini-1.5-flash", generation_config=video_generation_config, safety_settings=safety_settings,system_instruction=image_prompt)
+audio_model = genai.GenerativeModel(model_name="gemini-1.5-flash", generation_config=audio_generation_config, safety_settings=safety_settings,system_instruction=image_prompt)
 
 
 #---------------------------------------------Discord Code-------------------------------------------------
@@ -92,7 +106,33 @@ async def on_message(message):
                                 #Split the Message so discord does not get upset
                                 await split_and_send_messages(message, response_text, 1700)
                                 return
-            #Not an Image do text response
+                    elif any(attachment.filename.lower().endswith(ext) for ext in ['.mp4', '.mov', '.avi', '.flv', '.wmv', '.webm', '.mkv']):
+                        await message.add_reaction('🎥')
+                        
+                        async with aiohttp.ClientSession() as session:
+                            async with session.get(attachment.url) as resp:
+                                if resp.status != 200:
+                                    await message.channel.send('Unable to download the video.')
+                                    return
+                                video_data = await resp.read()
+                                response_text = await generate_response_with_video_and_text(video_data, cleaned_text)
+                                #Split the Message so discord does not get upset
+                                await split_and_send_messages(message, response_text, 1700)
+                                return
+                    elif any(attachment.filename.lower().endswith(ext) for ext in ['.mp3', '.wav', '.flac', '.ogg', '.wma', '.aac', '.m4a']):
+                        await message.add_reaction('🎵')
+                        
+                        async with aiohttp.ClientSession() as session:
+                            async with session.get(attachment.url) as resp:
+                                if resp.status != 200:
+                                    await message.channel.send('Unable to download the audio.')
+                                    return
+                                audio_data = await resp.read()
+                                response_text = await generate_response_with_audio_and_text(audio_data, cleaned_text)
+                                #Split the Message so discord does not get upset
+                                await split_and_send_messages(message, response_text, 1700)
+                                return
+            #Not an Image/video/audio do text response
             else:
                 print("New Message FROM:" + str(message.author.id) + ": " + cleaned_text)
                 #Check for Keyword Reset
@@ -131,6 +171,22 @@ async def generate_response_with_text(message_text):
 async def generate_response_with_image_and_text(image_data, text):
     image_parts = [{"mime_type": "image/jpeg", "data": image_data}]
     prompt_parts = [image_parts[0], f"\n{text if text else 'What is this a picture of?'}"]
+    response = image_model.generate_content(prompt_parts)
+    if(response._error):
+        return "❌" +  str(response._error)
+    return response.text
+
+async def generate_response_with_video_and_text(video_data, text):
+    video_parts = [{"mime_type": "video/mp4", "data": video_data}]
+    prompt_parts = [video_parts[0], f"\n{text if text else 'What is this a video of?'}"]
+    response = image_model.generate_content(prompt_parts)
+    if(response._error):
+        return "❌" +  str(response._error)
+    return response.text
+
+async def generate_response_with_audio_and_text(audio_data, text):
+    audio_parts = [{"mime_type": "audio/mp3", "data": audio_data}]
+    prompt_parts = [audio_parts[0], f"\n{text if text else 'What is this a audio of?'}"]
     response = image_model.generate_content(prompt_parts)
     if(response._error):
         return "❌" +  str(response._error)
