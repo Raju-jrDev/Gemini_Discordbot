@@ -1,4 +1,4 @@
-﻿import os
+import os
 import re
 
 import aiohttp
@@ -49,16 +49,25 @@ audio_generation_config = {
     "top_k": 32,
     "max_output_tokens": 512,
 }
+pdf_generation_config = {
+    "temperature": 0.4,
+    "top_p": 1,
+    "top_k": 32,
+    "max_output_tokens": 512,
+}
+
+
 safety_settings = [
-    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"}
+    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
 ]
 text_model = genai.GenerativeModel(model_name="gemini-1.5-flash", generation_config=text_generation_config, safety_settings=safety_settings,system_instruction=system_prompt)
 image_model = genai.GenerativeModel(model_name="gemini-1.5-flash", generation_config=image_generation_config, safety_settings=safety_settings,system_instruction=image_prompt)
 video_model = genai.GenerativeModel(model_name="gemini-1.5-flash", generation_config=video_generation_config, safety_settings=safety_settings,system_instruction=image_prompt)
 audio_model = genai.GenerativeModel(model_name="gemini-1.5-flash", generation_config=audio_generation_config, safety_settings=safety_settings,system_instruction=image_prompt)
+pdf_model = genai.GenerativeModel(model_name="gemini-1.5-flash", generation_config=pdf_generation_config, safety_settings=safety_settings,system_instruction=image_prompt)
 
 
 #---------------------------------------------Discord Code-------------------------------------------------
@@ -75,88 +84,109 @@ async def on_ready():
     print(f'Gemini Bot Logged in as {bot.user}')
     print("----------------------------------------")
 
+@bot.event
+async def on_disconnect():
+    print('Bot disconnected! Attempting to reconnect...')
+    await bot.connect(reconnect=True)
+
+@bot.event
+async def on_error(event, *args, **kwargs):
+    print(f'An error occurred: {event}')
+
 #On Message Function
 @bot.event
 async def on_message(message):
     # Ignore messages sent by the bot
     if message.author == bot.user or message.mention_everyone:
         return
-    # Check if the bot is mentioned or the message is a DM
-    if bot.user.mentioned_in(message) or isinstance(message.channel, discord.DMChannel):
-        #Start Typing to seem like something happened
-        cleaned_text = clean_discord_message(message.content)
 
-        async with message.channel.typing():
-            # Check for image attachments
-            if message.attachments:
-                print("New Image Message FROM:" + str(message.author.id) + ": " + cleaned_text)
-                #Currently no chat history for images
-                for attachment in message.attachments:
-                    #these are the only image extentions it currently accepts
-                    if any(attachment.filename.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp']):
-                        await message.add_reaction('🎨')
+    # Process the message content
+    cleaned_text = clean_discord_message(message.content)
 
-                        async with aiohttp.ClientSession() as session:
-                            async with session.get(attachment.url) as resp:
-                                if resp.status != 200:
-                                    await message.channel.send('Unable to download the image.')
-                                    return
-                                image_data = await resp.read()
-                                response_text = await generate_response_with_image_and_text(image_data, cleaned_text)
-                                #Split the Message so discord does not get upset
-                                await split_and_send_messages(message, response_text, 1700)
-                                return
-                    elif any(attachment.filename.lower().endswith(ext) for ext in ['.mp4', '.mov', '.avi', '.flv', '.wmv', '.webm', '.mkv']):
-                        await message.add_reaction('🎥')
-                        
-                        async with aiohttp.ClientSession() as session:
-                            async with session.get(attachment.url) as resp:
-                                if resp.status != 200:
-                                    await message.channel.send('Unable to download the video.')
-                                    return
-                                video_data = await resp.read()
-                                response_text = await generate_response_with_video_and_text(video_data, cleaned_text)
-                                #Split the Message so discord does not get upset
-                                await split_and_send_messages(message, response_text, 1700)
-                                return
-                    elif any(attachment.filename.lower().endswith(ext) for ext in ['.mp3', '.wav', '.flac', '.ogg', '.wma', '.aac', '.m4a']):
-                        await message.add_reaction('🎵')
-                        
-                        async with aiohttp.ClientSession() as session:
-                            async with session.get(attachment.url) as resp:
-                                if resp.status != 200:
-                                    await message.channel.send('Unable to download the audio.')
-                                    return
-                                audio_data = await resp.read()
-                                response_text = await generate_response_with_audio_and_text(audio_data, cleaned_text)
-                                #Split the Message so discord does not get upset
-                                await split_and_send_messages(message, response_text, 1700)
-                                return
-            #Not an Image/video/audio do text response
-            else:
-                print("New Message FROM:" + str(message.author.id) + ": " + cleaned_text)
-                #Check for Keyword Reset
-                if "RESET" in cleaned_text:
-                    #End back message
-                    if message.author.id in message_history:
-                        del message_history[message.author.id]
-                    await message.channel.send("🤖 History Reset for user: " + str(message.author.name))
-                    return
-                await message.add_reaction('💬')
+    async with message.channel.typing():
+        # Check for image attachments
+        if message.attachments:
+            print("New Image Message FROM:" + str(message.author.id) + ": " + cleaned_text)
+            #Currently no chat history for images
+            for attachment in message.attachments:
+                #these are the only image extentions it currently accepts
+                if any(attachment.filename.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp']):
+                    await message.add_reaction('🎨')
 
-                #Check if history is disabled just send response
-                if(MAX_HISTORY == 0):
-                    response_text = await generate_response_with_text(cleaned_text)
-                    #add AI response to history
-                    await split_and_send_messages(message, response_text, 1700)
-                    return;
-                #Add users question to history
-                update_message_history(message.author.id,cleaned_text)
-                response_text = await generate_response_with_text(get_formatted_message_history(message.author.id))
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(attachment.url) as resp:
+                            if resp.status != 200:
+                                await message.channel.send('Unable to download the image.')
+                                return
+                            image_data = await resp.read()
+                            response_text = await generate_response_with_image_and_text(image_data, cleaned_text)
+                            #Split the Message so discord does not get upset
+                            await split_and_send_messages(message, response_text, 1700)
+                            return
+                elif any(attachment.filename.lower().endswith(ext) for ext in ['.mp4', '.mov', '.avi', '.flv', '.wmv', '.webm', '.mkv']):
+                    await message.add_reaction('🎥')
+                    
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(attachment.url) as resp:
+                            if resp.status != 200:
+                                await message.channel.send('Unable to download the video.')
+                                return
+                            video_data = await resp.read()
+                            response_text = await generate_response_with_video_and_text(video_data, cleaned_text)
+                            #Split the Message so discord does not get upset
+                            await split_and_send_messages(message, response_text, 1700)
+                            return
+                elif any(attachment.filename.lower().endswith(ext) for ext in ['.mp3', '.wav', '.flac', '.ogg', '.wma', '.aac', '.m4a']):
+                    await message.add_reaction('🎵')
+                    
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(attachment.url) as resp:
+                            if resp.status != 200:
+                                await message.channel.send('Unable to download the audio.')
+                                return
+                            audio_data = await resp.read()
+                            response_text = await generate_response_with_audio_and_text(audio_data, cleaned_text)
+                            #Split the Message so discord does not get upset
+                            await split_and_send_messages(message, response_text, 1700)
+                            return
+                elif any(attachment.filename.lower().endswith(ext) for ext in ['.pdf']):
+                    await message.add_reaction('📄')
+                    
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(attachment.url) as resp:
+                            if resp.status != 200:
+                                await message.channel.send('Unable to download the pdf.')
+                                return
+                            pdf_data = await resp.read()
+                            response_text = await generate_response_with_pdf_and_text(pdf_data, cleaned_text)
+                            #Split the Message so discord does not get upset
+                            await split_and_send_messages(message, response_text, 1700)
+                            return
+        #Not an Image/video/audio do text response
+        else:
+            print("New Message FROM:" + str(message.author.id) + ": " + cleaned_text)
+            #Check for Keyword Reset
+            if "RESET" in cleaned_text:
+                #End back message
+                if message.author.id in message_history:
+                    del message_history[message.author.id]
+                await message.channel.send("🤖 History Reset for user: " + str(message.author.name))
+                return
+            await message.add_reaction('💬')
+
+            #Check if history is disabled just send response
+            if(MAX_HISTORY == 0):
+                response_text = await generate_response_with_text(cleaned_text)
                 #add AI response to history
-                update_message_history(message.author.id,response_text)
-                #Split the Message so discord does not get upset
                 await split_and_send_messages(message, response_text, 1700)
+                return;
+            #Add users question to history
+            update_message_history(message.author.id,cleaned_text)
+            response_text = await generate_response_with_text(get_formatted_message_history(message.author.id))
+            #add AI response to history
+            update_message_history(message.author.id,response_text)
+            #Split the Message so discord does not get upset
+            await split_and_send_messages(message, response_text, 1700)
 
 #---------------------------------------------AI Generation History-------------------------------------------------
 
@@ -187,6 +217,14 @@ async def generate_response_with_video_and_text(video_data, text):
 async def generate_response_with_audio_and_text(audio_data, text):
     audio_parts = [{"mime_type": "audio/mp3", "data": audio_data}]
     prompt_parts = [audio_parts[0], f"\n{text if text else 'What is this a audio of?'}"]
+    response = image_model.generate_content(prompt_parts)
+    if(response._error):
+        return "❌" +  str(response._error)
+    return response.text
+
+async def generate_response_with_pdf_and_text(pdf_data, text):
+    pdf_parts = [{"mime_type": "application/pdf", "data": pdf_data}]
+    prompt_parts = [pdf_parts[0], f"\n{text if text else 'What is this a pdf of?'}"]
     response = image_model.generate_content(prompt_parts)
     if(response._error):
         return "❌" +  str(response._error)
@@ -234,9 +272,6 @@ def clean_discord_message(input_string):
     # Replace text between brackets with an empty string
     cleaned_content = bracket_pattern.sub('', input_string)
     return cleaned_content
-
-
-
 
 #---------------------------------------------Run Bot-------------------------------------------------
 bot.run(DISCORD_BOT_TOKEN)
