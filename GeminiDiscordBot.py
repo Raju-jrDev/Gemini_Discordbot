@@ -16,6 +16,7 @@ load_dotenv()
 GOOGLE_AI_KEY = os.getenv("GOOGLE_AI_KEY")
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 MAX_HISTORY = int(os.getenv("MAX_HISTORY"))
+ALLOWED_CHANNEL_IDS = list(map(int, os.getenv("ALLOWED_CHANNEL_IDS").split(',')))
 
 #---------------------------------------------System Prompt!-------------------------------------------------
 
@@ -93,9 +94,15 @@ async def on_disconnect():
 async def on_error(event, *args, **kwargs):
     print(f'An error occurred: {event}')
 
+# Check if the message is in an allowed channel
+def is_allowed_channel(ctx):
+    return ctx.channel.id in ALLOWED_CHANNEL_IDS
+
 #On Message Function
 @bot.event
 async def on_message(message):
+    if not is_allowed_channel(message):
+        await message.send("This bot is not allowed to be used in this channel.")
     # Ignore messages sent by the bot
     if message.author == bot.user or message.mention_everyone:
         return
