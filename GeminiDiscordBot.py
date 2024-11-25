@@ -101,9 +101,7 @@ async def on_error(event):
 def is_allowed_channel(ctx):
     return ctx.channel.id in ALLOWED_CHANNEL_IDS
 
-    async def on_message(message):
-        if not is_allowed_channel(message):
-            await message.channel.send("This bot is not allowed to be used in this channel.")
+@bot.event
 async def on_message(message):
     if not is_allowed_channel(message):
         await message.send("This bot is not allowed to be used in this channel.")
