@@ -94,15 +94,16 @@ async def on_disconnect():
         print(f'Error during reconnection: {e}')
 
 @bot.event
-async def on_error(event, *args, **kwargs):
+async def on_error(event):
     print(f'An error occurred: {event}')
 
 # Check if the message is in an allowed channel
 def is_allowed_channel(ctx):
     return ctx.channel.id in ALLOWED_CHANNEL_IDS
 
-    if not is_allowed_channel(message):
-        await message.channel.send("This bot is not allowed to be used in this channel.")
+    async def on_message(message):
+        if not is_allowed_channel(message):
+            await message.channel.send("This bot is not allowed to be used in this channel.")
 async def on_message(message):
     if not is_allowed_channel(message):
         await message.send("This bot is not allowed to be used in this channel.")
@@ -279,14 +280,10 @@ async def split_and_send_messages(message_system, text, max_length):
 def clean_discord_message(input_string):
     # Create a regular expression pattern to match text between < and >
     bracket_pattern = re.compile(r'<[^>]+>')
-    # Replace text between brackets with an empty string
-    cleaned_content = bracket_pattern.sub('', input_string)
-try:
-    bot.run(DISCORD_BOT_TOKEN)
-except Exception as e:
-    print(f'Error running the bot: {e}')
-finally:
-    keep_alive()
+    return bracket_pattern.sub('', input_string)
+# keep_alive()
+bot.run(DISCORD_BOT_TOKEN)
+keep_alive()
 
 #---------------------------------------------Run Bot-------------------------------------------------
-bot.run(DISCORD_BOT_TOKEN)
+# bot.run(DISCORD_BOT_TOKEN)
