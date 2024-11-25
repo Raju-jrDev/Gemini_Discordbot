@@ -281,9 +281,9 @@ def clean_discord_message(input_string):
     # Create a regular expression pattern to match text between < and >
     bracket_pattern = re.compile(r'<[^>]+>')
     return bracket_pattern.sub('', input_string)
-# keep_alive()
-bot.run(DISCORD_BOT_TOKEN)
 keep_alive()
+# bot.run(DISCORD_BOT_TOKEN)
+# keep_alive()
 
 #---------------------------------------------Run Bot-------------------------------------------------
-# bot.run(DISCORD_BOT_TOKEN)
+bot.run(DISCORD_BOT_TOKEN)
