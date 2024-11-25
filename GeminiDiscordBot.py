@@ -7,7 +7,7 @@ import google.generativeai as genai
 from discord.ext import commands
 from dotenv import load_dotenv
 from keep_alive import keep_alive
-keep_alive()
+# keep_alive() should be called after bot.run() to avoid multiple event loops
 
 message_history = {}
 
@@ -88,7 +88,10 @@ async def on_ready():
 @bot.event
 async def on_disconnect():
     print('Bot disconnected! Attempting to reconnect...')
-    await bot.connect(reconnect=True)
+    try:
+        await bot.connect(reconnect=True)
+    except Exception as e:
+        print(f'Error during reconnection: {e}')
 
 @bot.event
 async def on_error(event, *args, **kwargs):
@@ -98,8 +101,8 @@ async def on_error(event, *args, **kwargs):
 def is_allowed_channel(ctx):
     return ctx.channel.id in ALLOWED_CHANNEL_IDS
 
-#On Message Function
-@bot.event
+    if not is_allowed_channel(message):
+        await message.channel.send("This bot is not allowed to be used in this channel.")
 async def on_message(message):
     if not is_allowed_channel(message):
         await message.send("This bot is not allowed to be used in this channel.")
@@ -278,7 +281,12 @@ def clean_discord_message(input_string):
     bracket_pattern = re.compile(r'<[^>]+>')
     # Replace text between brackets with an empty string
     cleaned_content = bracket_pattern.sub('', input_string)
-    return cleaned_content
+try:
+    bot.run(DISCORD_BOT_TOKEN)
+except Exception as e:
+    print(f'Error running the bot: {e}')
+finally:
+    keep_alive()
 
 #---------------------------------------------Run Bot-------------------------------------------------
 bot.run(DISCORD_BOT_TOKEN)
